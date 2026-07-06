@@ -1,7 +1,6 @@
 // Ưu tiên đọc dữ liệu nhanh từ Google Sheets dạng CSV publish.
 // Nếu 2 link CSV lỗi hoặc để trống, web sẽ thử Apps Script; nếu vẫn lỗi thì dùng dữ liệu offline bên dưới.
-window.TOPICS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTkIPodQgQjrIhEenTQ6gzV4fYGJqKyXBuzqiAbfnhyFMD15Aiw4czVbelNtVV6RTEF1FyddasMlkUf/pub?gid=657678682&single=true&output=csv";
-window.HOTSPOTS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTkIPodQgQjrIhEenTQ6gzV4fYGJqKyXBuzqiAbfnhyFMD15Aiw4czVbelNtVV6RTEF1FyddasMlkUf/pub?gid=0&single=true&output=csv";
+
 
 // Link Apps Script giữ lại làm dự phòng. Muốn tắt dự phòng thì để trống.
 window.GOOGLE_SHEET_API_URL = window.GOOGLE_SHEET_API_URL || "";
