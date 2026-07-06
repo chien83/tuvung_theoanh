@@ -1,6 +1,10 @@
-// Dán link Apps Script Web App /exec vào đây để đọc dữ liệu từ Google Sheets.
-// Để trống thì web dùng dữ liệu offline bên dưới.
-window.GOOGLE_SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwxYUiqZfvUaY9uyQGELvooF4ZnYVg5nQkuOTJDsOSyWig2p-HLrSjlX3Hr0YqcGrmv/exec";
+// Ưu tiên đọc dữ liệu nhanh từ Google Sheets dạng CSV publish.
+// Nếu 2 link CSV lỗi hoặc để trống, web sẽ thử Apps Script; nếu vẫn lỗi thì dùng dữ liệu offline bên dưới.
+window.TOPICS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTkIPodQgQjrIhEenTQ6gzV4fYGJqKyXBuzqiAbfnhyFMD15Aiw4czVbelNtVV6RTEF1FyddasMlkUf/pub?gid=657678682&single=true&output=csv";
+window.HOTSPOTS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTkIPodQgQjrIhEenTQ6gzV4fYGJqKyXBuzqiAbfnhyFMD15Aiw4czVbelNtVV6RTEF1FyddasMlkUf/pub?gid=0&single=true&output=csv";
+
+// Link Apps Script giữ lại làm dự phòng. Muốn tắt dự phòng thì để trống.
+window.GOOGLE_SHEET_API_URL = window.GOOGLE_SHEET_API_URL || "";
 
 window.VOCAB_TOPICS = [
   {
@@ -149,10 +153,97 @@ window.VOCAB_UTILS = {
     window.VOCAB_HOTSPOTS = hotspots.map(item => window.VOCAB_UTILS.normalizeHotspot(item)).filter(item => item.topic_id && item.word);
     return true;
   },
-  loadData() {
+  parseCsv(text) {
+    const rows = [];
+    let row = [];
+    let cell = "";
+    let inQuotes = false;
+    const input = String(text || "").replace(/^\uFEFF/, "");
+
+    for (let i = 0; i < input.length; i++) {
+      const char = input[i];
+      const next = input[i + 1];
+
+      if (inQuotes) {
+        if (char === '"' && next === '"') {
+          cell += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = false;
+        } else {
+          cell += char;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        row.push(cell);
+        cell = "";
+      } else if (char === '\n') {
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = "";
+      } else if (char === '\r') {
+        // Bỏ qua, xử lý theo \n.
+      } else {
+        cell += char;
+      }
+    }
+
+    row.push(cell);
+    if (row.some(value => String(value).trim() !== "")) rows.push(row);
+    return rows;
+  },
+  csvToObjects(text) {
+    const rows = window.VOCAB_UTILS.parseCsv(text)
+      .filter(row => row.some(value => String(value ?? "").trim() !== ""));
+    if (!rows.length) return [];
+
+    const headers = rows.shift().map(header => String(header || "").trim());
+    return rows.map(row => {
+      const obj = {};
+      headers.forEach((header, index) => {
+        obj[header] = row[index] ?? "";
+      });
+      return obj;
+    });
+  },
+  withCacheBust(url) {
+    const clean = String(url || "").trim();
+    if (!clean) return "";
+    const separator = clean.includes("?") ? "&" : "?";
+    return `${clean}${separator}_=${Date.now()}`;
+  },
+  async fetchText(url) {
+    const response = await fetch(window.VOCAB_UTILS.withCacheBust(url), { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.text();
+  },
+  async loadCsvData() {
+    const topicsUrl = String(window.TOPICS_CSV_URL || "").trim();
+    const hotspotsUrl = String(window.HOTSPOTS_CSV_URL || "").trim();
+
+    if (!topicsUrl || !hotspotsUrl || topicsUrl.includes("DAN_LINK") || hotspotsUrl.includes("DAN_LINK")) {
+      return false;
+    }
+
+    const [topicsText, hotspotsText] = await Promise.all([
+      window.VOCAB_UTILS.fetchText(topicsUrl),
+      window.VOCAB_UTILS.fetchText(hotspotsUrl)
+    ]);
+
+    return window.VOCAB_UTILS.applyRemoteData({
+      topics: window.VOCAB_UTILS.csvToObjects(topicsText),
+      hotspots: window.VOCAB_UTILS.csvToObjects(hotspotsText)
+    });
+  },
+  loadAppsScriptData() {
     const url = String(window.GOOGLE_SHEET_API_URL || "").trim();
     if (!url || url.includes("DAN_LINK") || url.includes("PASTE")) {
-      return Promise.resolve({ source: "offline" });
+      return Promise.resolve(false);
     }
 
     // Dùng JSONP để tránh lỗi CORS khi web chạy trên GitHub Pages.
@@ -166,21 +257,39 @@ window.VOCAB_UTILS = {
         script.remove();
       };
       const fallback = (reason) => {
-        console.warn("Không đọc được Google Sheets, web dùng data.js offline.", reason || "");
+        console.warn("Không đọc được Apps Script, web dùng data.js offline.", reason || "");
         cleanup();
-        resolve({ source: "offline" });
+        resolve(false);
       };
       const timer = setTimeout(() => fallback("timeout"), 12000);
 
       window[callbackName] = data => {
         const ok = window.VOCAB_UTILS.applyRemoteData(data);
         cleanup();
-        resolve({ source: ok ? "sheets" : "offline" });
+        resolve(ok);
       };
 
       script.onerror = () => fallback("script-error");
       script.src = `${url}${separator}callback=${encodeURIComponent(callbackName)}&v=${Date.now()}`;
       document.head.appendChild(script);
     });
+  },
+  async loadData() {
+    try {
+      const ok = await window.VOCAB_UTILS.loadCsvData();
+      if (ok) return { source: "csv" };
+      console.warn("CSV Google Sheets trả dữ liệu rỗng, thử Apps Script hoặc data.js offline.");
+    } catch (error) {
+      console.warn("Không đọc được CSV Google Sheets, thử Apps Script hoặc data.js offline.", error);
+    }
+
+    try {
+      const ok = await window.VOCAB_UTILS.loadAppsScriptData();
+      if (ok) return { source: "apps-script" };
+    } catch (error) {
+      console.warn("Không đọc được Apps Script, web dùng data.js offline.", error);
+    }
+
+    return { source: "offline" };
   }
 };
