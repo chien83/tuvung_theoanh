@@ -1,0 +1,1107 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chỉnh tọa độ từ vựng</title>
+  <style>
+    :root {
+      --pink: #b0006d;
+      --blue: #0b72d9;
+      --green: #15803d;
+      --bg: #f7edf4;
+      --line: #e3cddd;
+      --soft: #fff7fb;
+      --text: #222;
+      --muted: #6c5261;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 370px;
+      gap: 14px;
+      min-height: 100vh;
+      padding: 14px;
+    }
+
+    .workspace,
+    .panel {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(94, 18, 65, .08);
+    }
+
+    .workspace { min-width: 0; overflow: hidden; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--soft);
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--pink);
+      font-size: 22px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    .toolbar-actions a {
+      color: var(--pink);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .image-scroll {
+      overflow: auto;
+      padding: 14px;
+      background: #f3e8f0;
+      height: calc(100vh - 86px);
+    }
+
+    .stage {
+      position: relative;
+      width: calc(var(--base-width, 1032px) * var(--zoom, 1));
+      max-width: none;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .stage img {
+      display: block;
+      width: 100%;
+      height: auto;
+      pointer-events: none;
+    }
+
+    .box {
+      position: absolute;
+      border: 2px dashed rgba(11, 114, 217, .32);
+      background: transparent;
+      border-radius: 6px;
+      cursor: move;
+      transform-origin: center;
+    }
+
+    .box.shape-polygon {
+      border-color: transparent;
+      border-radius: 0;
+    }
+
+    .box svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .box polygon {
+      fill: rgba(11, 114, 217, .08);
+      stroke: rgba(11, 114, 217, .55);
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .box.selected {
+      border-color: var(--pink);
+      border-style: solid;
+      background: transparent;
+      box-shadow: 0 0 0 3px rgba(176, 0, 109, .14);
+    }
+
+    .box.shape-polygon.selected {
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    .box.shape-polygon.selected polygon {
+      fill: rgba(176, 0, 109, .08);
+      stroke: var(--pink);
+    }
+
+    .box-label {
+      position: absolute;
+      left: 0;
+      top: -27px;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      background: var(--pink);
+      color: white;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      pointer-events: none;
+    }
+
+    .handle {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border: 2px solid white;
+      background: var(--pink);
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+    }
+
+    .handle.nw { left: -8px; top: -8px; cursor: nwse-resize; }
+    .handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
+    .handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+    .handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+
+    .point-handle {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border: 2px solid white;
+      background: var(--blue);
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .28);
+      transform: translate(-50%, -50%);
+      cursor: grab;
+      z-index: 3;
+    }
+
+    .box.selected .point-handle {
+      background: var(--pink);
+    }
+
+    .crosshair {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: none;
+    }
+
+    .crosshair::before,
+    .crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(176, 0, 109, .55);
+    }
+
+    .crosshair::before { left: var(--cx, 0); top: 0; width: 1px; height: 100%; }
+    .crosshair::after { left: 0; top: var(--cy, 0); width: 100%; height: 1px; }
+
+    .panel {
+      overflow: auto;
+      max-height: calc(100vh - 28px);
+      padding: 12px;
+    }
+
+    .section {
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section:last-child { border-bottom: 0; margin-bottom: 0; }
+
+    h2 {
+      margin: 0 0 10px;
+      color: var(--pink);
+      font-size: 18px;
+    }
+
+    label {
+      display: block;
+      margin: 8px 0 4px;
+      color: #5c4352;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input,
+    textarea,
+    select,
+    button {
+      font: inherit;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 9px;
+      outline: none;
+      background: white;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--pink);
+      box-shadow: 0 0 0 3px rgba(176, 0, 109, .1);
+    }
+
+    textarea {
+      min-height: 104px;
+      resize: vertical;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button,
+    .button-link {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: white;
+      padding: 8px 10px;
+      cursor: pointer;
+      color: #222;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    button.primary,
+    .button-link.primary {
+      background: var(--pink);
+      border-color: var(--pink);
+      color: white;
+      font-weight: 700;
+    }
+
+    button.green {
+      background: var(--green);
+      border-color: var(--green);
+      color: white;
+      font-weight: 700;
+    }
+
+    .word-list {
+      display: grid;
+      gap: 6px;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .word-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      padding: 8px 9px;
+    }
+
+    .word-item.active {
+      border-color: var(--pink);
+      background: var(--soft);
+      color: var(--pink);
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      background: #111827;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 999px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s;
+      z-index: 20;
+    }
+
+    .toast.show { opacity: 1; }
+
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .image-scroll { height: 62vh; }
+      .panel { max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="workspace">
+      <div class="toolbar">
+        <h1 id="editorTitle">Chỉnh tọa độ</h1>
+        <div class="toolbar-actions">
+          <a href="index.html">Trang chủ</a>
+          <a id="lessonLink" href="lesson.html">Xem bài học</a>
+          <label for="zoomRange">Zoom</label>
+          <input id="zoomRange" type="range" min="50" max="180" value="100">
+          <span id="zoomText">100%</span>
+          <label><input id="showAllToggle" type="checkbox"> Hiện tất cả vùng</label>
+        </div>
+      </div>
+      <div class="image-scroll">
+        <div class="stage" id="stage">
+          <img id="mainImage" src="" alt="">
+          <div class="crosshair" id="crosshair"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="section">
+        <h2>Chủ đề</h2>
+        <label>topic_id</label>
+        <select id="topicSelect"></select>
+        <div class="buttons">
+          <button class="primary" id="newBtn">+ Tạo vùng mới</button>
+          <button id="deleteBtn">Xóa vùng</button>
+        </div>
+        <p class="small">Kéo trên ảnh để tạo vùng mới. Chọn vùng rồi kéo để di chuyển, kéo chấm tròn ở góc để thu nhỏ/phóng to.</p>
+      </div>
+
+      <div class="section">
+        <h2>Thông tin từ</h2>
+        <div class="grid-2">
+          <div>
+            <label>word</label>
+            <input id="word">
+          </div>
+          <div>
+            <label>display_text</label>
+            <input id="display_text">
+          </div>
+        </div>
+        <label>vi</label>
+        <input id="vi">
+        <label>pronunciation_text</label>
+        <input id="pronunciation_text">
+        <label>ipa</label>
+        <input id="ipa" placeholder="Ví dụ: /ʃelf/">
+      </div>
+
+      <div class="section">
+        <h2>Tọa độ</h2>
+        <div class="grid-2">
+          <div>
+            <label>shape</label>
+            <select id="shape">
+              <option value="rect">Chữ nhật</option>
+              <option value="rotated">Chữ nhật xoay góc</option>
+              <option value="polygon">Vẽ theo vật thể</option>
+            </select>
+          </div>
+          <div>
+            <label>angle</label>
+            <input id="angle" type="number" step="1" value="0">
+          </div>
+        </div>
+        <div class="grid-4">
+          <div><label>x</label><input id="x" type="number" step="0.1"></div>
+          <div><label>y</label><input id="y" type="number" step="0.1"></div>
+          <div><label>w</label><input id="w" type="number" step="0.1"></div>
+          <div><label>h</label><input id="h" type="number" step="0.1"></div>
+        </div>
+        <label>points polygon</label>
+        <textarea id="points" placeholder="Ví dụ: 54,82 58,78 74,77 61,92"></textarea>
+        <div class="buttons">
+          <button id="nudgeLeft">←</button>
+          <button id="nudgeRight">→</button>
+          <button id="nudgeUp">↑</button>
+          <button id="nudgeDown">↓</button>
+          <button id="smaller">Thu nhỏ</button>
+          <button id="larger">Phóng to</button>
+          <button id="rotateLeft">Xoay -5°</button>
+          <button id="rotateRight">Xoay +5°</button>
+          <button id="startPolygonBtn">Vẽ polygon</button>
+          <button id="finishPolygonBtn">Dừng vẽ</button>
+          <button id="boxToPolygonBtn">Khung → polygon</button>
+        </div>
+        <p class="small">Polygon: bấm “Vẽ polygon”, rồi click các điểm quanh vật thể trên ảnh. Có thể kéo từng chấm để chỉnh lại.</p>
+        <p class="small" id="pixelInfo">Px: -</p>
+      </div>
+
+      <div class="section">
+        <h2>Dòng copy vào Sheets</h2>
+        <textarea id="csvLine" readonly></textarea>
+        <div class="buttons">
+          <button class="green" id="copyRowBtn">Copy dòng Sheet</button>
+          <button id="copyTopicBtn">Copy Sheet chủ đề đang chọn</button>
+          <button id="copyAllBtn">Copy Sheet tất cả chủ đề</button>
+        </div>
+        <p class="small">Phần này dùng tab giữa các cột, nên dán vào Google Sheets sẽ tự tách cột.</p>
+      </div>
+
+      <div class="section">
+        <h2>Dòng copy vào data.js</h2>
+        <textarea id="jsLine" readonly></textarea>
+        <div class="buttons">
+          <button class="green" id="copyJsRowBtn">Copy dòng JS</button>
+          <button id="copyJsTopicBtn">Copy JS chủ đề này</button>
+          <button id="copyJsAllBtn">Copy toàn bộ VOCAB_HOTSPOTS JS</button>
+        </div>
+        <p class="small">Dùng phần này khi bạn muốn dán trực tiếp vào mảng <strong>window.VOCAB_HOTSPOTS</strong> trong file data.js.</p>
+      </div>
+
+      <div class="section">
+        <h2>Danh sách vùng</h2>
+        <div class="word-list" id="wordList"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast">Đã copy</div>
+
+  <script src="data.js"></script>
+  <script>
+    const HEADERS = VOCAB_HEADERS.hotspots;
+    const stage = document.getElementById("stage");
+    const image = document.getElementById("mainImage");
+    const crosshair = document.getElementById("crosshair");
+    const wordList = document.getElementById("wordList");
+    const toast = document.getElementById("toast");
+    const topicSelect = document.getElementById("topicSelect");
+    const fields = Object.fromEntries(["word", "display_text", "vi", "pronunciation_text", "ipa", "shape", "angle", "x", "y", "w", "h", "points", "csvLine", "jsLine"].map(id => [id, document.getElementById(id)]));
+    const pixelInfo = document.getElementById("pixelInfo");
+    const showAllToggle = document.getElementById("showAllToggle");
+    const zoomRange = document.getElementById("zoomRange");
+    const zoomText = document.getElementById("zoomText");
+    const editableRows = VOCAB_HOTSPOTS.map((item, index) => ({ ...item, id: index + 1 }));
+    let topicId = VOCAB_UTILS.getParam("topic") || VOCAB_TOPICS[0]?.topic_id;
+    let selectedId = null;
+    let drag = null;
+    let nextId = editableRows.length + 1;
+    let drawingPolygon = false;
+
+    VOCAB_TOPICS.forEach(topic => {
+      const option = document.createElement("option");
+      option.value = topic.topic_id;
+      option.textContent = `${topic.order ? topic.order + ". " : ""}${topic.title}`;
+      topicSelect.appendChild(option);
+    });
+    topicSelect.value = topicId;
+
+    function rowsForTopic() {
+      return editableRows.filter(item => item.topic_id === topicId);
+    }
+
+    function selected() {
+      return editableRows.find(item => item.id === selectedId) || rowsForTopic()[0] || null;
+    }
+
+    function topic() {
+      return VOCAB_UTILS.getTopic(topicId);
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function round(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    function parsePoints(pointsText) {
+      return String(pointsText || "")
+        .trim()
+        .split(/\s+/)
+        .map(pair => pair.split(",").map(Number))
+        .filter(pair => pair.length === 2 && pair.every(Number.isFinite))
+        .map(([x, y]) => ({ x: clamp(x, 0, 100), y: clamp(y, 0, 100) }));
+    }
+
+    function formatPoints(points) {
+      return points.map(point => `${round(point.x)},${round(point.y)}`).join(" ");
+    }
+
+    function getShape(item) {
+      return String(item?.shape || "rect") || "rect";
+    }
+
+    function getShapeBox(item) {
+      const points = parsePoints(item?.points);
+      if (getShape(item) === "polygon" && points.length >= 3) {
+        const xs = points.map(point => point.x);
+        const ys = points.map(point => point.y);
+        const left = Math.min(...xs);
+        const top = Math.min(...ys);
+        const right = Math.max(...xs);
+        const bottom = Math.max(...ys);
+        return { x: left, y: top, w: Math.max(0.5, right - left), h: Math.max(0.5, bottom - top), points };
+      }
+      return {
+        x: Number(item?.x) || 0,
+        y: Number(item?.y) || 0,
+        w: Number(item?.w) || 1,
+        h: Number(item?.h) || 1,
+        points
+      };
+    }
+
+    function boxToPoints(item) {
+      return [
+        { x: item.x, y: item.y },
+        { x: item.x + item.w, y: item.y },
+        { x: item.x + item.w, y: item.y + item.h },
+        { x: item.x, y: item.y + item.h }
+      ];
+    }
+
+    function pointerPercent(event) {
+      const rect = stage.getBoundingClientRect();
+      return {
+        x: clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100),
+        y: clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100)
+      };
+    }
+
+    function normalizeBox(item) {
+      if (!item) return;
+      item.shape = getShape(item);
+      item.angle = round(Number(item.angle) || 0);
+      if (item.shape === "polygon") {
+        const points = parsePoints(item.points).map(point => ({
+          x: round(clamp(point.x, 0, 100)),
+          y: round(clamp(point.y, 0, 100))
+        }));
+        item.points = formatPoints(points);
+        if (points.length >= 3) {
+          const box = getShapeBox(item);
+          item.x = round(clamp(box.x, 0, 100));
+          item.y = round(clamp(box.y, 0, 100));
+          item.w = round(clamp(box.w, 0.5, 100 - item.x));
+          item.h = round(clamp(box.h, 0.5, 100 - item.y));
+          return;
+        }
+        if (points.length > 0) {
+          const xs = points.map(point => point.x);
+          const ys = points.map(point => point.y);
+          item.x = round(Math.min(...xs));
+          item.y = round(Math.min(...ys));
+          item.w = 0.5;
+          item.h = 0.5;
+          return;
+        }
+        item.w = clamp(Number(item.w) || 1, 0.5, 100);
+        item.h = clamp(Number(item.h) || 1, 0.5, 100);
+        item.x = round(clamp(Number(item.x) || 0, 0, 100 - item.w));
+        item.y = round(clamp(Number(item.y) || 0, 0, 100 - item.h));
+        item.w = round(item.w);
+        item.h = round(item.h);
+        return;
+      }
+      item.w = clamp(Number(item.w) || 1, 0.5, 100);
+      item.h = clamp(Number(item.h) || 1, 0.5, 100);
+      item.x = clamp(Number(item.x) || 0, 0, 100 - item.w);
+      item.y = clamp(Number(item.y) || 0, 0, 100 - item.h);
+      item.x = round(item.x);
+      item.y = round(item.y);
+      item.w = round(item.w);
+      item.h = round(item.h);
+      item.points = item.points || "";
+    }
+
+    function csvRow(item) {
+      return HEADERS.map(key => VOCAB_UTILS.csvCell(item?.[key])).join(",");
+    }
+
+    function sheetCell(value) {
+      return String(value ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
+    }
+
+    function sheetRow(item) {
+      return HEADERS.map(key => sheetCell(item?.[key])).join("\t");
+    }
+
+    function sheetTable(rows, includeHeader = true) {
+      const body = rows.map(row => sheetRow(row)).join("\n");
+      return includeHeader ? `${HEADERS.join("\t")}\n${body}` : body;
+    }
+
+    function jsString(value) {
+      return JSON.stringify(String(value ?? ""));
+    }
+
+    function jsNumber(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? String(round(number)) : "0";
+    }
+
+    function jsObjectRow(item, withComma = true) {
+      if (!item) return "";
+      const parts = [
+        `topic_id: ${jsString(item.topic_id)}`,
+        `word: ${jsString(item.word)}`,
+        `display_text: ${jsString(item.display_text)}`,
+        `vi: ${jsString(item.vi)}`,
+        `pronunciation_text: ${jsString(item.pronunciation_text)}`
+      ];
+      if (item.ipa) parts.push(`ipa: ${jsString(item.ipa)}`);
+      const shape = getShape(item);
+      if (shape !== "rect") parts.push(`shape: ${jsString(shape)}`);
+      if (shape !== "rect" || Number(item.angle)) parts.push(`angle: ${jsNumber(item.angle)}`);
+      if (shape === "polygon" && item.points) parts.push(`points: ${jsString(item.points)}`);
+      parts.push(`x: ${jsNumber(item.x)}`);
+      parts.push(`y: ${jsNumber(item.y)}`);
+      parts.push(`w: ${jsNumber(item.w)}`);
+      parts.push(`h: ${jsNumber(item.h)}`);
+      return `  { ${parts.join(", ")} }${withComma ? "," : ""}`;
+    }
+
+    function jsRows(rows) {
+      return rows.map(item => jsObjectRow(item)).join("\n");
+    }
+
+    function jsAllRows(rows) {
+      return `window.VOCAB_HOTSPOTS = [\n${jsRows(rows)}\n];`;
+    }
+
+    function renderTopic() {
+      const currentTopic = topic();
+      document.getElementById("editorTitle").textContent = `Chỉnh tọa độ: ${currentTopic.title}`;
+      document.getElementById("lessonLink").href = `lesson.html?topic=${encodeURIComponent(topicId)}`;
+      image.src = currentTopic.image;
+      image.alt = currentTopic.title;
+      if (!selected() && rowsForTopic()[0]) selectedId = rowsForTopic()[0].id;
+      syncUI();
+    }
+
+    function renderBoxes() {
+      stage.querySelectorAll(".box").forEach(el => el.remove());
+      rowsForTopic().forEach(item => {
+        if (!showAllToggle.checked && item.id !== selectedId) return;
+        normalizeBox(item);
+        const shape = getShape(item);
+        const boxData = getShapeBox(item);
+        const renderedShape = shape === "polygon" && boxData.points.length >= 3 ? "polygon" : (shape === "rotated" ? "rotated" : "rect");
+        const box = document.createElement("div");
+        box.className = `box shape-${renderedShape}${item.id === selectedId ? " selected" : ""}`;
+        box.dataset.id = item.id;
+        box.style.left = `${boxData.x}%`;
+        box.style.top = `${boxData.y}%`;
+        box.style.width = `${boxData.w}%`;
+        box.style.height = `${boxData.h}%`;
+        box.style.transform = shape === "rotated" ? `rotate(${Number(item.angle) || 0}deg)` : "";
+        box.innerHTML = `<span class="box-label">${item.display_text || item.word || "new"}</span>`;
+        if (shape === "polygon" && boxData.points.length > 0) {
+          const local = boxData.points.map(point => {
+            const lx = boxData.w ? ((point.x - boxData.x) / boxData.w) * 100 : 0;
+            const ly = boxData.h ? ((point.y - boxData.y) / boxData.h) * 100 : 0;
+            return { x: clamp(lx, 0, 100), y: clamp(ly, 0, 100) };
+          });
+          if (local.length >= 3) {
+            const svgPoints = local.map(point => `${point.x},${point.y}`).join(" ");
+            box.insertAdjacentHTML("beforeend", `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="${svgPoints}"></polygon></svg>`);
+          }
+          if (item.id === selectedId) {
+            local.forEach((point, index) => {
+              const pointHandle = document.createElement("span");
+              pointHandle.className = "point-handle";
+              pointHandle.dataset.pointIndex = index;
+              pointHandle.style.left = `${point.x}%`;
+              pointHandle.style.top = `${point.y}%`;
+              box.appendChild(pointHandle);
+            });
+          }
+        }
+        if (item.id === selectedId) {
+          ["nw", "ne", "sw", "se"].forEach(handle => {
+            const el = document.createElement("span");
+            el.className = `handle ${handle}`;
+            el.dataset.handle = handle;
+            box.appendChild(el);
+          });
+        }
+        stage.appendChild(box);
+      });
+    }
+
+    function renderList() {
+      wordList.innerHTML = "";
+      rowsForTopic().forEach(item => {
+        const btn = document.createElement("button");
+        btn.className = `word-item${item.id === selectedId ? " active" : ""}`;
+        btn.type = "button";
+        btn.innerHTML = `<span><strong>${item.display_text || item.word || "new"}</strong><br><small>${getShape(item)} | ${item.x}, ${item.y}, ${item.w}, ${item.h}</small></span><span>#${item.id}</span>`;
+        btn.addEventListener("click", () => {
+          selectedId = item.id;
+          syncUI();
+        });
+        wordList.appendChild(btn);
+      });
+    }
+
+    function updateForm() {
+      const item = selected();
+      if (!item) {
+        ["word", "display_text", "vi", "pronunciation_text", "ipa", "shape", "angle", "x", "y", "w", "h", "points", "csvLine", "jsLine"].forEach(key => fields[key].value = "");
+        pixelInfo.textContent = "Px: -";
+        return;
+      }
+      ["word", "display_text", "vi", "pronunciation_text", "ipa", "shape", "angle", "x", "y", "w", "h", "points"].forEach(key => {
+        fields[key].value = item[key] ?? "";
+      });
+      fields.shape.value = getShape(item);
+      fields.csvLine.value = sheetRow(item);
+      fields.jsLine.value = jsObjectRow(item);
+      const rect = stage.getBoundingClientRect();
+      pixelInfo.textContent = `Px hiển thị: x ${Math.round(item.x * rect.width / 100)}, y ${Math.round(item.y * rect.height / 100)}, w ${Math.round(item.w * rect.width / 100)}, h ${Math.round(item.h * rect.height / 100)}`;
+    }
+
+    function updateCopyLabels() {
+      document.getElementById("copyTopicBtn").textContent = `Copy Sheet chủ đề đang chọn (${rowsForTopic().length} dòng)`;
+      document.getElementById("copyAllBtn").textContent = `Copy Sheet tất cả chủ đề (${editableRows.length} dòng)`;
+      document.getElementById("copyJsTopicBtn").textContent = `Copy JS chủ đề này (${rowsForTopic().length} dòng)`;
+      document.getElementById("copyJsAllBtn").textContent = `Copy toàn bộ VOCAB_HOTSPOTS JS (${editableRows.length} dòng)`;
+    }
+
+    function syncUI() {
+      normalizeBox(selected());
+      renderBoxes();
+      renderList();
+      updateForm();
+      updateCopyLabels();
+    }
+
+    function updateSelectedFromForm() {
+      const item = selected();
+      if (!item) return;
+      ["word", "display_text", "vi", "pronunciation_text", "ipa", "shape", "angle", "x", "y", "w", "h", "points"].forEach(key => {
+        item[key] = ["angle", "x", "y", "w", "h"].includes(key) ? Number(fields[key].value) : fields[key].value;
+      });
+      normalizeBox(item);
+      syncUI();
+    }
+
+    function createNewAt(x = 45, y = 45) {
+      const item = {
+        id: nextId++,
+        topic_id: topicId,
+        word: "new word",
+        display_text: "new word",
+        vi: "",
+        pronunciation_text: "new word",
+        ipa: "",
+        shape: "rect",
+        angle: 0,
+        points: "",
+        x: round(clamp(x, 0, 90)),
+        y: round(clamp(y, 0, 90)),
+        w: 10,
+        h: 8
+      };
+      editableRows.push(item);
+      selectedId = item.id;
+      syncUI();
+    }
+
+    function movePolygonPoints(item, dx, dy) {
+      const points = parsePoints(item.points);
+      item.points = formatPoints(points.map(point => ({
+        x: clamp(point.x + dx, 0, 100),
+        y: clamp(point.y + dy, 0, 100)
+      })));
+    }
+
+    function scalePolygonPoints(item, originalBox, nextBox, originalPoints) {
+      const sx = originalBox.w ? nextBox.w / originalBox.w : 1;
+      const sy = originalBox.h ? nextBox.h / originalBox.h : 1;
+      item.points = formatPoints(originalPoints.map(point => ({
+        x: clamp(nextBox.x + (point.x - originalBox.x) * sx, 0, 100),
+        y: clamp(nextBox.y + (point.y - originalBox.y) * sy, 0, 100)
+      })));
+    }
+
+    function resizeSelected(delta) {
+      const item = selected();
+      if (!item) return;
+      if (getShape(item) === "polygon") {
+        const originalBox = getShapeBox(item);
+        const originalPoints = parsePoints(item.points);
+        const nextBox = {
+          x: originalBox.x - delta / 2,
+          y: originalBox.y - delta / 2,
+          w: originalBox.w + delta,
+          h: originalBox.h + delta
+        };
+        nextBox.w = clamp(nextBox.w, 0.5, 100);
+        nextBox.h = clamp(nextBox.h, 0.5, 100);
+        nextBox.x = clamp(nextBox.x, 0, 100 - nextBox.w);
+        nextBox.y = clamp(nextBox.y, 0, 100 - nextBox.h);
+        scalePolygonPoints(item, originalBox, nextBox, originalPoints);
+        normalizeBox(item);
+        syncUI();
+        return;
+      }
+      item.x -= delta / 2;
+      item.y -= delta / 2;
+      item.w += delta;
+      item.h += delta;
+      normalizeBox(item);
+      syncUI();
+    }
+
+    function nudge(dx, dy) {
+      const item = selected();
+      if (!item) return;
+      if (getShape(item) === "polygon") {
+        movePolygonPoints(item, dx, dy);
+        normalizeBox(item);
+        syncUI();
+        return;
+      }
+      item.x += dx;
+      item.y += dy;
+      normalizeBox(item);
+      syncUI();
+    }
+
+    function rotateSelected(delta) {
+      const item = selected();
+      if (!item) return;
+      item.shape = "rotated";
+      item.angle = round((Number(item.angle) || 0) + delta);
+      syncUI();
+    }
+
+    async function copyText(text) {
+      await navigator.clipboard.writeText(text);
+      toast.textContent = "Đã copy";
+      toast.classList.add("show");
+      clearTimeout(toast.timer);
+      toast.timer = setTimeout(() => toast.classList.remove("show"), 1200);
+    }
+
+    ["word", "display_text", "vi", "pronunciation_text", "ipa", "shape", "angle", "x", "y", "w", "h", "points"].forEach(key => {
+      fields[key].addEventListener("input", updateSelectedFromForm);
+    });
+    fields.shape.addEventListener("change", updateSelectedFromForm);
+
+    topicSelect.addEventListener("change", () => {
+      topicId = topicSelect.value;
+      selectedId = rowsForTopic()[0]?.id || null;
+      history.replaceState(null, "", `hotspot_editor.html?topic=${encodeURIComponent(topicId)}`);
+      renderTopic();
+    });
+
+    document.getElementById("newBtn").addEventListener("click", () => createNewAt());
+    document.getElementById("deleteBtn").addEventListener("click", () => {
+      const index = editableRows.findIndex(item => item.id === selectedId);
+      if (index >= 0) editableRows.splice(index, 1);
+      selectedId = rowsForTopic()[Math.max(0, index - 1)]?.id || rowsForTopic()[0]?.id || null;
+      syncUI();
+    });
+
+    document.getElementById("nudgeLeft").addEventListener("click", () => nudge(-0.5, 0));
+    document.getElementById("nudgeRight").addEventListener("click", () => nudge(0.5, 0));
+    document.getElementById("nudgeUp").addEventListener("click", () => nudge(0, -0.5));
+    document.getElementById("nudgeDown").addEventListener("click", () => nudge(0, 0.5));
+    document.getElementById("smaller").addEventListener("click", () => resizeSelected(-1));
+    document.getElementById("larger").addEventListener("click", () => resizeSelected(1));
+    document.getElementById("rotateLeft").addEventListener("click", () => rotateSelected(-5));
+    document.getElementById("rotateRight").addEventListener("click", () => rotateSelected(5));
+    document.getElementById("startPolygonBtn").addEventListener("click", () => {
+      const item = selected();
+      if (!item) return;
+      item.shape = "polygon";
+      item.points = "";
+      drawingPolygon = true;
+      syncUI();
+      toast.textContent = "Click các điểm quanh vật thể";
+      toast.classList.add("show");
+      clearTimeout(toast.timer);
+      toast.timer = setTimeout(() => toast.classList.remove("show"), 1600);
+    });
+    document.getElementById("finishPolygonBtn").addEventListener("click", () => {
+      drawingPolygon = false;
+      syncUI();
+    });
+    document.getElementById("boxToPolygonBtn").addEventListener("click", () => {
+      const item = selected();
+      if (!item) return;
+      item.shape = "polygon";
+      item.points = formatPoints(boxToPoints(item));
+      drawingPolygon = false;
+      normalizeBox(item);
+      syncUI();
+    });
+    document.getElementById("copyRowBtn").addEventListener("click", () => selected() && copyText(sheetRow(selected())));
+    document.getElementById("copyTopicBtn").addEventListener("click", () => copyText(sheetTable(rowsForTopic())));
+    document.getElementById("copyAllBtn").addEventListener("click", () => copyText(sheetTable(editableRows)));
+    document.getElementById("copyJsRowBtn").addEventListener("click", () => selected() && copyText(jsObjectRow(selected())));
+    document.getElementById("copyJsTopicBtn").addEventListener("click", () => copyText(jsRows(rowsForTopic())));
+    document.getElementById("copyJsAllBtn").addEventListener("click", () => copyText(jsAllRows(editableRows)));
+    showAllToggle.addEventListener("change", renderBoxes);
+
+    zoomRange.addEventListener("input", () => {
+      const value = Number(zoomRange.value);
+      stage.style.setProperty("--zoom", value / 100);
+      zoomText.textContent = `${value}%`;
+      updateForm();
+    });
+
+    image.addEventListener("load", () => {
+      stage.style.setProperty("--base-width", `${image.naturalWidth || 1032}px`);
+      syncUI();
+    });
+
+    stage.addEventListener("pointermove", event => {
+      const p = pointerPercent(event);
+      crosshair.style.display = "block";
+      crosshair.style.setProperty("--cx", `${p.x}%`);
+      crosshair.style.setProperty("--cy", `${p.y}%`);
+      if (!drag) return;
+
+      const item = selected();
+      const dx = p.x - drag.start.x;
+      const dy = p.y - drag.start.y;
+      if (drag.type === "move") {
+        if (getShape(item) === "polygon") {
+          item.points = formatPoints(drag.originalPoints.map(point => ({
+            x: clamp(point.x + dx, 0, 100),
+            y: clamp(point.y + dy, 0, 100)
+          })));
+        } else {
+          item.x = drag.original.x + dx;
+          item.y = drag.original.y + dy;
+        }
+      } else if (drag.type === "resize") {
+        let left = drag.original.x;
+        let top = drag.original.y;
+        let right = drag.original.x + drag.original.w;
+        let bottom = drag.original.y + drag.original.h;
+        if (drag.handle.includes("w")) left = drag.original.x + dx;
+        if (drag.handle.includes("e")) right = drag.original.x + drag.original.w + dx;
+        if (drag.handle.includes("n")) top = drag.original.y + dy;
+        if (drag.handle.includes("s")) bottom = drag.original.y + drag.original.h + dy;
+        item.x = Math.min(left, right);
+        item.y = Math.min(top, bottom);
+        item.w = Math.abs(right - left);
+        item.h = Math.abs(bottom - top);
+        if (getShape(item) === "polygon") {
+          scalePolygonPoints(item, drag.original, { x: item.x, y: item.y, w: item.w, h: item.h }, drag.originalPoints);
+        }
+      } else if (drag.type === "point") {
+        const points = [...drag.originalPoints];
+        points[drag.pointIndex] = { x: p.x, y: p.y };
+        item.points = formatPoints(points);
+      } else if (drag.type === "draw") {
+        item.x = Math.min(drag.start.x, p.x);
+        item.y = Math.min(drag.start.y, p.y);
+        item.w = Math.abs(p.x - drag.start.x);
+        item.h = Math.abs(p.y - drag.start.y);
+      }
+      normalizeBox(item);
+      renderBoxes();
+      renderList();
+      updateForm();
+    });
+
+    stage.addEventListener("pointerleave", () => {
+      if (!drag) crosshair.style.display = "none";
+    });
+
+    stage.addEventListener("pointerdown", event => {
+      const p = pointerPercent(event);
+      if (drawingPolygon) {
+        const item = selected();
+        if (!item) return;
+        item.shape = "polygon";
+        const points = parsePoints(item.points);
+        points.push(p);
+        item.points = formatPoints(points);
+        normalizeBox(item);
+        syncUI();
+        return;
+      }
+
+      const box = event.target.closest(".box");
+      if (box) {
+        selectedId = Number(box.dataset.id);
+        const item = selected();
+        const handle = event.target.dataset.handle;
+        const pointHandle = event.target.closest(".point-handle");
+        const originalBox = getShapeBox(item);
+        const originalPoints = parsePoints(item.points);
+        drag = {
+          type: pointHandle ? "point" : (handle ? "resize" : "move"),
+          handle,
+          pointIndex: pointHandle ? Number(pointHandle.dataset.pointIndex) : -1,
+          start: p,
+          original: { x: originalBox.x, y: originalBox.y, w: originalBox.w, h: originalBox.h },
+          originalPoints
+        };
+      } else {
+        createNewAt(p.x, p.y);
+        const item = selected();
+        item.w = 1;
+        item.h = 1;
+        drag = {
+          type: "draw",
+          start: p,
+          original: { x: item.x, y: item.y, w: item.w, h: item.h }
+        };
+      }
+      stage.setPointerCapture(event.pointerId);
+      syncUI();
+    });
+
+    stage.addEventListener("pointerup", event => {
+      drag = null;
+      if (stage.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId);
+      syncUI();
+    });
+
+    document.addEventListener("keydown", event => {
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+      if (event.key === "ArrowLeft") nudge(-0.5, 0);
+      if (event.key === "ArrowRight") nudge(0.5, 0);
+      if (event.key === "ArrowUp") nudge(0, -0.5);
+      if (event.key === "ArrowDown") nudge(0, 0.5);
+      if (event.key === "+" || event.key === "=") resizeSelected(1);
+      if (event.key === "-" || event.key === "_") resizeSelected(-1);
+    });
+
+    renderTopic();
+  </script>
+</body>
+</html>
