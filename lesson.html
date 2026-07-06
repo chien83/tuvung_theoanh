@@ -631,7 +631,7 @@
     let exerciseFeedbackType = "info";
 
     document.title = topic.title || "Học từ vựng";
-    document.getElementById("title").textContent = `${topic.order ? topic.order + ". " : ""}${topic.title || "Học từ vựng"}`;
+    document.getElementById("title").textContent = topic.title || "Học từ vựng";
     document.getElementById("viTitle").textContent = topic.vi_title || "";
     document.getElementById("editorLink").href = `hotspot_editor.html?topic=${encodeURIComponent(topic.topic_id)}`;
     image.src = topic.image;
